@@ -1,5 +1,9 @@
 # See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
+# Agents & Skills
+/.agents/
+skills-lock.json
+
 # Compiled output
 /dist
 /tmp
@@ -28,6 +32,10 @@ yarn-error.log
 !.vscode/extensions.json
 !.vscode/mcp.json
 .history/*
+
+# Firebase
+/.firebase/
+.firebaserc.local
 
 # Miscellaneous
 /.angular/cache
