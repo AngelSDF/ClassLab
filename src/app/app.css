@@ -1,0 +1,94 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+}
+
+.app-header {
+  align-items: center;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  gap: 2rem;
+  min-height: 4.5rem;
+  padding: 0 6vw;
+}
+
+.brand {
+  color: #172554;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+}
+
+.brand span {
+  color: #2563eb;
+}
+
+nav {
+  display: flex;
+  gap: 1.25rem;
+}
+
+nav a,
+.link-button {
+  color: #475569;
+  font: inherit;
+  text-decoration: none;
+}
+
+nav a.active {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.user-menu {
+  align-items: center;
+  display: flex;
+  gap: 0.85rem;
+  margin-left: auto;
+}
+
+.role-pill {
+  background: #dbeafe;
+  border-radius: 99px;
+  color: #1e40af;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+}
+
+.link-button {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.page-shell {
+  margin: 0 auto;
+  max-width: 1100px;
+  padding: 2.5rem 6vw 4rem;
+}
+
+@media (max-width: 620px) {
+  .app-header {
+    gap: 1rem;
+    padding: 0 1.25rem;
+  }
+
+  nav {
+    gap: 0.75rem;
+  }
+
+  .user-menu {
+    margin-left: 0;
+  }
+
+  .role-pill {
+    display: none;
+  }
+
+  .page-shell {
+    padding: 1.5rem 1.25rem;
+  }
+}

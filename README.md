@@ -1,59 +1,45 @@
 # ClassLab
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.2.2.
+Base Angular + Firebase para una plataforma de evaluación formativa. La generación PDF/CAG/Groq está maquetada; todavía no existe backend ni procesamiento real.
 
-## Development server
+## Conectar Firebase de desarrollo
 
-To start a local development server, run:
+1. Crea un proyecto Firebase en la región que corresponda a tu audiencia. La ubicación de Firestore no se puede cambiar: migrar exige un proyecto nuevo.
+2. Registra una aplicación web. En Authentication habilita **Google** y **Anonymous**, y crea Firestore.
+3. La configuración pública de `claab-8677f` está presente en ambos entornos para poder probar con `npm start` y desplegar. No contiene credenciales administrativas ni secretos.
+4. Ejecuta `npx firebase-tools login`, seguido de `npx firebase-tools use claab-8677f`.
+5. Compila y despliega con `npm run build` y `npx firebase-tools deploy --only hosting,firestore:rules`.
 
-```bash
-ng serve
-```
+El usuario que inicia con Google recibe el rol `student`. Para asignar `teacher`, un administrador debe editar `users/{uid}.roles` en Firestore Console y agregar `teacher`. El cliente no puede cambiar roles.
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Al completar el onboarding, el perfil se guarda en `users/{uid}` con: `firstName`, `lastName` (obligatorios), `email`, `photoURL`, `providerId` (desde Google), `age`, `gender`, `phoneNumber`, `locale` (opcionales) y `roles` (`['student']`), más `createdAt`, `updatedAt` y `lastLoginAt`.
 
-## Code scaffolding
+## Modelo de clases
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+- `classes/{classId}` (id autogenerado): `name`, `ownerTeacherId`, `capacity` (vacantes), `unlimited` (si es `true`, se ignora `capacity`), `modality` (`auto`/`approval`), `accessCode` (6 caracteres), `joinOpen`, `memberCount`, `status`, timestamps.
+- `classes/{classId}/members/{uid}`: `uid`, `firstName`, `lastName`, `email`, `roleInClass` (`student`/`teacher`), `isOwner`, `status` (`active`/`pending`), `joinedAt`. El creador entra como miembro con `isOwner: true`.
+- `classCodes/{CODE}` → `{ classId }`: resuelve el código de acceso a la clase sin permitir enumerarlas.
+- `classes/{classId}/evaluations` y `classes/{classId}/publications`: reservadas para fases posteriores.
 
-```bash
-ng generate component component-name
-```
+La incorporación usa el código: en modalidad `auto` el estudiante entra directo (respetando las vacantes, con transacción; con `unlimited` no hay tope) y en `approval` queda `pending` hasta que el docente apruebe. El docente propietario aprueba o rechaza solicitudes (la aprobación revalida la capacidad en transacción) y los estudiantes pueden salir de la clase. El docente puede editar nombre, vacantes/`unlimited` y modalidad, abrir/cerrar incorporaciones y regenerar el código (lo que invalida el anterior sin borrar historial).
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+**Fase actual:** Fases 1–4 completas (crear/listar, ingresar por código, moderación y salida, edición de clase).
 
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
+## Desarrollo
 
 ```bash
-ng build
+npm install
+npm start
+npm test
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+Los entornos contienen solo la configuración pública necesaria para Firebase Authentication y Firestore. Nunca agregues claves Groq, cuentas de servicio u otros secretos al frontend.
 
-## Running unit tests
+## Límites actuales
 
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+- Firestore bloquea por defecto todos los datos excepto la creación/lectura del perfil propio.
+- La evaluación de invitado crea una sesión anónima y guarda su nombre solo durante la sesión; aún no valida códigos ni guarda intentos.
+- Cloud Storage está desactivado temporalmente: materiales, carga de PDF y sus reglas se implementarán cuando el servicio pueda activarse.
+- Clases: se crean, se listan, muestran su plantilla de integrantes, permiten unirse por código (automático o con solicitud pendiente), aprobar/rechazar solicitudes, salir de la clase y editar la clase (nombre, vacantes con opción `unlimited`, modalidad, abrir/cerrar incorporaciones y regenerar código).
+- La capacidad se controla con transacciones de Firestore; el blindaje definitivo contra concurrencia requiere backend/Cloud Functions.
+- Generación IA, preguntas, resultados y reglas de publicación pertenecen a hitos posteriores.

@@ -1,1 +1,229 @@
-/* You can add global styles to this file, and also import other style files */
+* {
+  box-sizing: border-box;
+}
+body {
+  background: #f8fafc;
+  color: #172554;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  margin: 0;
+}
+h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  margin: 0.2rem 0 1rem;
+}
+h2 {
+  margin-top: 0;
+}
+p {
+  color: #475569;
+  line-height: 1.6;
+}
+.lead {
+  font-size: 1.15rem;
+  max-width: 42rem;
+}
+.eyebrow {
+  color: #2563eb;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
+.card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  box-shadow: 0 8px 24px #0f172a0a;
+  padding: 1.5rem;
+}
+.grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  margin-top: 2rem;
+}
+.hero,
+.auth-layout {
+  align-items: center;
+  display: flex;
+  gap: 3rem;
+  justify-content: space-between;
+}
+.auth-layout {
+  min-height: calc(100dvh - 9rem);
+}
+.auth-layout > div {
+  max-width: 36rem;
+}
+.auth-card {
+  display: grid;
+  gap: 1rem;
+  max-width: 28rem;
+  width: 100%;
+}
+.primary-button,
+.secondary-button {
+  border-radius: 0.6rem;
+  display: inline-block;
+  font-weight: 700;
+  padding: 0.8rem 1rem;
+  text-align: center;
+  text-decoration: none;
+}
+.primary-button {
+  background: #2563eb;
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+}
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.secondary-button {
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+.separator {
+  align-items: center;
+  color: #94a3b8;
+  display: flex;
+  gap: 0.75rem;
+}
+.separator::before,
+.separator::after {
+  background: #e2e8f0;
+  content: '';
+  flex: 1;
+  height: 1px;
+}
+.auth-card small {
+  color: #64748b;
+}
+.narrow-page {
+  margin: 0 auto;
+  max-width: 650px;
+}
+.narrow-page > a {
+  color: #2563eb;
+  text-decoration: none;
+}
+.narrow-page .card {
+  margin-top: 1rem;
+}
+.narrow-page form {
+  display: grid;
+  gap: 1rem;
+}
+.narrow-page label {
+  display: grid;
+  font-weight: 700;
+  gap: 0.4rem;
+}
+.narrow-page input {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  font: inherit;
+  padding: 0.7rem;
+}
+.notice {
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  padding: 0.75rem;
+}
+.error {
+  color: #b91c1c;
+}
+.profile-card {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.checkbox {
+  align-items: center;
+  display: flex !important;
+  gap: 0.5rem;
+}
+.checkbox input {
+  width: auto;
+}
+.member-list {
+  display: grid;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+.member-list li {
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding: 0.55rem 0;
+}
+.member-list li small {
+  color: #64748b;
+  display: block;
+}
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+.profile-card img {
+  border-radius: 50%;
+  height: 4rem;
+  width: 4rem;
+}
+.role-options {
+  display: flex;
+  gap: 0.75rem;
+}
+.role-options button {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  padding: 0.55rem 0.8rem;
+}
+.role-options button.selected {
+  background: #dbeafe;
+  border-color: #2563eb;
+  color: #1e40af;
+}
+a {
+  color: #1d4ed8;
+}
+@media (max-width: 700px) {
+  .hero,
+  .auth-layout {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 2rem;
+  }
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+.member-list {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+.member-list li {
+  border-bottom: 1px solid #e2e8f0;
+  display: grid;
+  gap: 0.15rem;
+  padding-bottom: 0.6rem;
+}
+.member-list small {
+  color: #64748b;
+}
