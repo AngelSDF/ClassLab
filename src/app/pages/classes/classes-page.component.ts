@@ -1,7 +1,7 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { ClassesService } from '../core/classes.service';
-import { SessionService } from '../core/session.service';
+import { ClassesService } from '../../core/classes/classes.service';
+import { SessionService } from '../../core/auth/session.service';
 
 @Component({
   selector: 'app-classes-page',
@@ -14,6 +14,7 @@ import { SessionService } from '../core/session.service';
 
       <div class="actions">
         <a class="secondary-button" routerLink="/classes/join">Ingresar a clase</a>
+        <a class="secondary-button" routerLink="/publications/join">Ingresar a evaluación</a>
         @if (session.activeRole() === 'teacher') {
           <a class="primary-button" routerLink="/classes/new">Crear clase</a>
         }
@@ -38,18 +39,41 @@ import { SessionService } from '../core/session.service';
         <div class="grid">
           @for (item of classes.myClasses(); track item.id) {
             <article class="card">
-              <h2>{{ item.name }}</h2>
+              <h2>
+                <a class="class-name-link" [routerLink]="['/classes', item.id]">
+                  {{ item.name }}
+                </a>
+              </h2>
               <p>{{ item.memberCount }} de {{ item.capacity }} integrantes</p>
               <p>
                 {{ item.modality === 'auto' ? 'Ingreso automático' : 'Ingreso con aprobación' }}
               </p>
-              <a [routerLink]="['/classes', item.id]">Abrir clase</a>
             </article>
           }
         </div>
       }
     </section>
   `,
+  styles: [
+    `
+      .class-name-link {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .class-name-link:hover,
+      .class-name-link:focus-visible {
+        color: var(--accent-strong);
+        text-decoration: underline;
+      }
+
+      .class-name-link:focus-visible {
+        border-radius: 0.25rem;
+        outline: 2px solid var(--outline);
+        outline-offset: 2px;
+      }
+    `,
+  ],
 })
 export class ClassesPageComponent implements OnInit {
   protected readonly session = inject(SessionService);

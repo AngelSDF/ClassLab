@@ -5,8 +5,8 @@
 
 .app-header {
   align-items: center;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   display: flex;
   gap: 2rem;
   min-height: 4.5rem;
@@ -14,7 +14,7 @@
 }
 
 .brand {
-  color: #172554;
+  color: var(--text);
   font-size: 1.35rem;
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -22,7 +22,7 @@
 }
 
 .brand span {
-  color: #2563eb;
+  color: var(--accent);
 }
 
 nav {
@@ -30,15 +30,18 @@ nav {
   gap: 1.25rem;
 }
 
-nav a,
-.link-button {
-  color: #475569;
+nav a {
+  color: var(--text-muted);
   font: inherit;
   text-decoration: none;
 }
 
+nav a:hover {
+  color: var(--accent-strong);
+}
+
 nav a.active {
-  color: #1d4ed8;
+  color: var(--accent-strong);
   font-weight: 700;
 }
 
@@ -50,9 +53,9 @@ nav a.active {
 }
 
 .role-pill {
-  background: #dbeafe;
+  background: var(--accent-soft);
   border-radius: 99px;
-  color: #1e40af;
+  color: var(--accent-soft-text);
   font-size: 0.8rem;
   font-weight: 700;
   padding: 0.35rem 0.7rem;
@@ -60,8 +63,50 @@ nav a.active {
 
 .link-button {
   background: transparent;
-  border: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  color: var(--text-muted);
   cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+  text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.link-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.link-button:focus-visible {
+  outline: 2px solid var(--outline);
+  outline-offset: 2px;
+}
+
+.theme-toggle {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.35rem 0.7rem;
+}
+
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--outline);
+  outline-offset: 2px;
 }
 
 .page-shell {
@@ -78,10 +123,6 @@ nav a.active {
 
   nav {
     gap: 0.75rem;
-  }
-
-  .user-menu {
-    margin-left: 0;
   }
 
   .role-pill {

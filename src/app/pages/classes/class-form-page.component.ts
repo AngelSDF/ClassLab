@@ -1,15 +1,15 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { ClassesService } from '../core/classes.service';
-import { ClassModality } from '../core/class-record';
+import { ClassesService } from '../../core/classes/classes.service';
+import { ClassModality } from '../../core/classes/class-record';
 
 @Component({
   selector: 'app-class-form-page',
   imports: [ReactiveFormsModule, RouterLink],
   template: `
     <section class="narrow-page">
-      <a routerLink="/classes">← Volver a mis clases</a>
+      <a class="back-link" routerLink="/classes">← Volver a mis clases</a>
 
       <article class="card">
         <p class="eyebrow">NUEVA CLASE</p>

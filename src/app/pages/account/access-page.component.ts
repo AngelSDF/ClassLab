@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { SessionService } from '../core/session.service';
+import { SessionService } from '../../core/auth/session.service';
 
 @Component({
   selector: 'app-access-page',
@@ -42,9 +42,7 @@ import { SessionService } from '../core/session.service';
           <span>o</span>
         </div>
 
-        <a class="secondary-button" routerLink="/guest">
-          Tengo un código de evaluación
-        </a>
+        <a class="secondary-button" routerLink="/guest"> Tengo un código de evaluación </a>
 
         <small>¿Necesitas ser docente? Solicita el rol al administrador.</small>
       </article>

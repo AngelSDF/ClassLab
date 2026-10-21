@@ -1,8 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
-import { SessionService } from '../core/session.service';
-import { Gender } from '../core/user-record';
+import { SessionService } from '../../core/auth/session.service';
+import { Gender } from '../../core/auth/user-record';
 
 @Component({
   selector: 'app-onboarding-page',
@@ -12,9 +12,7 @@ import { Gender } from '../core/user-record';
       <div>
         <p class="eyebrow">UN ÚLTIMO PASO</p>
         <h1>Confirma tus datos.</h1>
-        <p class="lead">
-          Los tomamos de tu cuenta de Google. Edítalos si hace falta y guarda.
-        </p>
+        <p class="lead">Los tomamos de tu cuenta de Google. Edítalos si hace falta y guarda.</p>
       </div>
 
       <article class="card auth-card">
@@ -69,22 +67,16 @@ import { Gender } from '../core/user-record';
           <label>
             <span>Género</span>
             <select formControlName="gender">
-              <option [ngValue]="null">Prefiero no indicar</option>
+              <option [ngValue]="null">Prefiero no decirlo</option>
               <option value="female">Femenino</option>
               <option value="male">Masculino</option>
               <option value="other">Otro</option>
-              <option value="prefer_not_to_say">Prefiero no decirlo</option>
             </select>
           </label>
 
           <label>
             <span>Teléfono</span>
-            <input
-              type="tel"
-              formControlName="phone"
-              autocomplete="tel"
-              maxlength="40"
-            />
+            <input type="tel" formControlName="phone" autocomplete="tel" maxlength="40" />
             @if (form.controls.phone.touched && form.controls.phone.invalid) {
               <small class="error">Ingresa un teléfono de hasta 40 caracteres.</small>
             }
@@ -99,15 +91,54 @@ import { Gender } from '../core/user-record';
             <p class="error">{{ error() }}</p>
           }
 
-          <button class="primary-button" type="submit" [disabled]="working()">
-            {{ working() ? 'Guardando…' : 'Guardar y continuar' }}
-          </button>
+          <div class="form-actions">
+            <button type="button" class="secondary-button" [disabled]="busy()" (click)="cancel()">
+              {{ cancelling() ? 'Cancelando…' : 'Cancelar' }}
+            </button>
+
+            <button type="submit" class="primary-button" [disabled]="busy()">
+              {{ working() ? 'Guardando…' : 'Guardar y continuar' }}
+            </button>
+          </div>
         </form>
 
         <small>Tu correo proviene de Google y no puede editarse aquí.</small>
       </article>
     </section>
   `,
+  styles: [
+    `
+      .form-actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1rem;
+      }
+      .form-actions > button {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+      .secondary-button {
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border-strong);
+        border-radius: 0.5rem;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+        transition:
+          background-color 120ms ease,
+          border-color 120ms ease;
+      }
+      .secondary-button:hover:not(:disabled) {
+        background: var(--surface-muted);
+        border-color: var(--accent);
+      }
+      .form-actions > button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+    `,
+  ],
 })
 export class OnboardingPageComponent {
   private readonly session = inject(SessionService);
@@ -115,7 +146,10 @@ export class OnboardingPageComponent {
   private readonly fb = inject(FormBuilder);
 
   protected readonly working = signal(false);
+  protected readonly cancelling = signal(false);
   protected readonly error = signal<string | null>(null);
+
+  protected readonly busy = computed(() => this.working() || this.cancelling());
 
   protected readonly photoURL = computed(() => this.session.profilePrefill()?.photoURL ?? null);
   protected readonly email = computed(
@@ -131,8 +165,6 @@ export class OnboardingPageComponent {
   });
 
   constructor() {
-    // El guard ya esperó a que accountState sea 'needsOnboarding',
-    // por lo que el prefill está listo. Lo aplicamos de forma síncrona.
     const prefill = this.session.profilePrefill();
     if (prefill) {
       this.form.patchValue(
@@ -143,6 +175,7 @@ export class OnboardingPageComponent {
   }
 
   protected async submit(): Promise<void> {
+    if (this.busy()) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -156,6 +189,30 @@ export class OnboardingPageComponent {
       this.error.set(e instanceof Error ? e.message : 'No pudimos guardar tu perfil.');
     } finally {
       this.working.set(false);
+    }
+  }
+
+  /**
+   * Cancela el onboarding. En `needsOnboarding` aún no existe doc del usuario,
+   * así que cerrar sesión basta; el guard redirigirá al salir del estado.
+   */
+  protected async cancel(): Promise<void> {
+    if (this.busy()) return;
+
+    const confirmed = confirm(
+      'Si cancelas ahora, deberás iniciar sesión con Google otra vez para completar tu perfil. ¿Continuar?',
+    );
+    if (!confirmed) return;
+
+    try {
+      this.cancelling.set(true);
+      this.error.set(null);
+      await this.session.signOut();
+      await this.router.navigateByUrl('/access');
+    } catch (e) {
+      this.error.set(e instanceof Error ? e.message : 'No pudimos cancelar la operación.');
+    } finally {
+      this.cancelling.set(false);
     }
   }
 }

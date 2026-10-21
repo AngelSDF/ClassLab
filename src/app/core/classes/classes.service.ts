@@ -13,8 +13,9 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { firebaseFirestore } from './firebase';
-import { SessionService } from './session.service';
+import { firebaseFirestore } from '../shared/firebase';
+import { CODE_ATTEMPTS, CODE_LENGTH, generateAccessCode } from '../shared/access-code';
+import { SessionService } from '../auth/session.service';
 import {
   ClassMember,
   ClassMemberStatus,
@@ -23,22 +24,9 @@ import {
   UpdateClassData,
 } from './class-record';
 
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const CODE_LENGTH = 6;
-const CODE_ATTEMPTS = 5;
 const MAX_CAPACITY = 500;
 
 class CodeCollisionError extends Error {}
-
-function generateAccessCode(): string {
-  const bytes = new Uint8Array(CODE_LENGTH);
-  crypto.getRandomValues(bytes);
-  let code = '';
-  for (const byte of bytes) {
-    code += CODE_ALPHABET[byte % CODE_ALPHABET.length];
-  }
-  return code;
-}
 
 function describeError(err: unknown): string {
   const code = (err as { code?: string } | null)?.code;
@@ -177,6 +165,14 @@ export class ClassesService {
       return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
     });
     return members;
+  }
+
+  async getMyMembership(classId: string): Promise<ClassMember | null> {
+    const firestore = this.requireFirestore();
+    const user = this.session.user();
+    if (!user) return null;
+    const snapshot = await getDoc(doc(firestore, 'classes', classId, 'members', user.uid));
+    return snapshot.exists() ? (snapshot.data() as ClassMember) : null;
   }
 
   async resolveClassByCode(code: string): Promise<ClassRecord> {

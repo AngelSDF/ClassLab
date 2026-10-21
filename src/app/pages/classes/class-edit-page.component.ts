@@ -1,16 +1,16 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { ClassesService } from '../core/classes.service';
-import { SessionService } from '../core/session.service';
-import { ClassModality, ClassRecord } from '../core/class-record';
+import { ClassesService } from '../../core/classes/classes.service';
+import { SessionService } from '../../core/auth/session.service';
+import { ClassModality, ClassRecord } from '../../core/classes/class-record';
 
 @Component({
   selector: 'app-class-edit-page',
   imports: [ReactiveFormsModule, RouterLink],
   template: `
     <section class="narrow-page">
-      <a [routerLink]="['/classes', classId]">← Volver a la clase</a>
+      <a class="back-link" [routerLink]="['/classes', classId]">← Volver a la clase</a>
 
       @if (loading()) {
         <p class="notice">Cargando la clase…</p>

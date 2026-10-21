@@ -1,23 +1,24 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { ClassesService } from '../core/classes.service';
+import { ClassesService } from '../../core/classes/classes.service';
+import { PublicationsService } from '../../core/publications/publications.service';
 
 @Component({
-  selector: 'app-join-class-page',
+  selector: 'app-join-publication-page',
   imports: [FormsModule, RouterLink],
   template: `
     <section class="narrow-page">
-      <a routerLink="/classes">← Volver a mis clases</a>
+      <a class="back-link" routerLink="/classes">← Volver a mis clases</a>
 
       <article class="card">
-        <p class="eyebrow">INGRESAR A CLASE</p>
+        <p class="eyebrow">INGRESAR A EVALUACIÓN</p>
         <h1>Ingresar con código</h1>
-        <p class="lead">Pídele el código de acceso a tu docente.</p>
+        <p class="lead">Pídele el código de la publicación a tu docente.</p>
 
         <form (ngSubmit)="submit()">
           <label>
-            <span>Código de la clase</span>
+            <span>Código de la publicación</span>
             <input
               name="code"
               [(ngModel)]="code"
@@ -37,14 +38,21 @@ import { ClassesService } from '../core/classes.service';
           }
 
           <button class="primary-button" [disabled]="working()">
-            {{ working() ? 'Ingresando…' : 'Ingresar' }}
+            {{ working() ? 'Buscando…' : 'Ingresar' }}
           </button>
         </form>
+
+        <p>
+          ¿Todavía no perteneces a la clase?
+          <a class="text-link" routerLink="/classes/join">Ingresa primero con el código de clase</a
+          >.
+        </p>
       </article>
     </section>
   `,
 })
-export class JoinClassPageComponent {
+export class JoinPublicationPageComponent {
+  private readonly publications = inject(PublicationsService);
   private readonly classes = inject(ClassesService);
   private readonly router = inject(Router);
 
@@ -56,7 +64,7 @@ export class JoinClassPageComponent {
 
   protected async submit(): Promise<void> {
     if (!this.code.trim()) {
-      this.error.set('Ingresa el código de la clase.');
+      this.error.set('Ingresa el código de la publicación.');
       return;
     }
     try {
@@ -64,14 +72,18 @@ export class JoinClassPageComponent {
       this.error.set(null);
       this.notice.set(null);
 
-      const result = await this.classes.joinClass(this.code);
-      if (result.status === 'pending') {
-        this.notice.set('Tu solicitud fue enviada. Espera la aprobación del docente.');
+      const { classId, publicationId } = await this.publications.resolveByCode(this.code);
+      const membership = await this.classes.getMyMembership(classId);
+      if (!membership || membership.status !== 'active') {
+        this.error.set(
+          'No eres miembro activo de esta clase. Primero ingresa con el código de la clase.',
+        );
         return;
       }
-      await this.router.navigate(['/classes', result.classRecord.id]);
+
+      await this.router.navigate(['/classes', classId, 'publications', publicationId, 'take']);
     } catch (e) {
-      this.error.set(e instanceof Error ? e.message : 'No pudimos ingresar a la clase.');
+      this.error.set(e instanceof Error ? e.message : 'No pudimos ingresar a la publicación.');
     } finally {
       this.working.set(false);
     }

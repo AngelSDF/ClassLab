@@ -42,8 +42,51 @@ rules_version = '2';
 //   - status: string (required: active | pending)
 //   - joinedAt: timestamp (required)
 //
+// Subcollection: classes/{classId}/evaluations/{evaluationId}
+// Fields:
+//   - title: string (required, 1-120)
+//   - status: string (required: draft)
+//   - sourceFiles: list of { name: string, size: number } (required, <= 20)
+//   - rawJson: string (required, 2-500000 bytes). JSON text with the generated
+//     questions; the client parses it into typed questions.
+//   - generationMeta: map (required: model, pdfPages, pdfCharacters,
+//     requestedQuestions, durationMs, schemaVersion)
+//   - createdBy: string (required, Auth uid)
+//   - createdAt, updatedAt: timestamp
+//
+// Subcollection: classes/{classId}/publications/{publicationId}
+// Fields:
+//   - evaluationId: string (required, source evaluation id)
+//   - title: string (required, 1-120)
+//   - accessCode: string (required, 6 chars, used by publicationCodes)
+//   - sourceFiles: list of { name: string, size: number } (required, <= 20)
+//   - rawJson: string (required, 2-500000 bytes). Sanitized student-facing
+//     questions only (no answer keys or explanations).
+//   - rawJsonSafe: bool (required, true; allows active members to read)
+//   - generationMeta: map (required: model, pdfPages, pdfCharacters,
+//     requestedQuestions, durationMs, schemaVersion)
+//   - openAt, closeAt: timestamp or null (both null or both set, openAt < closeAt)
+//   - maxAttempts: int (required, 1-100)
+//   - durationMinutes: int or null (optional time limit; null means no limit)
+//   - guestAccess: bool (required; enables anonymous guests)
+//   - guestCapacity: int (required, 0-500; >= 1 when guestAccess is true)
+//   - guestCount: int (required, >= 0; <= guestCapacity; never decreases)
+//   - attemptCount: int (required, >= 0; > 0 blocks editing)
+//   - createdBy: string (required, Auth uid)
+//   - createdAt, updatedAt: timestamp
+//
+// Subcollection: classes/{classId}/publications/{publicationId}/content/feedback
+//   Full questions with answer keys; readable by the owner, or by an active
+//   member after submitting. Writes are blocked once attemptCount > 0.
+//
+// Subcollection: classes/{classId}/publications/{publicationId}/results/{uid}
+//   - publicationId, studentId, studentName, publicationTitle
+//   - hasSubmitted: bool
+//   - attempts: list of { attemptNumber, status, answers, startedAt, submittedAt }
+//   - createdAt, updatedAt: timestamp
+//
+// Collection: publicationCodes/{CODE} -> { classId, publicationId }
 // Collection: classCodes/{CODE} -> { classId }
-// Collection: classes/{classId}/evaluations, classes/{classId}/publications (not enabled yet)
 // ===============================================================
 
 service cloud.firestore {
@@ -63,6 +106,11 @@ service cloud.firestore {
     function isNonAnonymous() {
       return isAuthenticated()
         && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isGuestSession() {
+      return isAuthenticated()
+        && request.auth.token.firebase.sign_in_provider == 'anonymous';
     }
 
     function userRoles() {
@@ -86,6 +134,13 @@ service cloud.firestore {
     function isClassMember(classId) {
       return isAuthenticated()
         && exists(/databases/$(database)/documents/classes/$(classId)/members/$(request.auth.uid));
+    }
+
+    function isActiveClassMember(classId) {
+      let memberPath = /databases/$(database)/documents/classes/$(classId)/members/$(request.auth.uid);
+      return isAuthenticated()
+        && exists(memberPath)
+        && get(memberPath).data.status == 'active';
     }
 
     // -------------------------------------------------------------
@@ -143,7 +198,7 @@ service cloud.firestore {
         && data.lastName.size() <= 80
         && data.email is string
         && isValidEmail(data.email)
-        && data.roles == ['student']
+        && data.roles is list
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
         && data.lastLoginAt is timestamp
@@ -165,10 +220,12 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId);
 
+      // New accounts always start as students; teacher role is granted manually.
       allow create: if isOwner(userId)
         && isNonAnonymous()
         && hasOnlyUserFields()
-        && isValidUser(request.resource.data);
+        && isValidUser(request.resource.data)
+        && request.resource.data.roles == ['student'];
 
       allow update: if isOwner(userId)
         && hasOnlyUserFields()
@@ -314,7 +371,13 @@ service cloud.firestore {
                     && klass.modality == 'approval'));
         }
 
-        allow get, list: if isClassMember(classId);
+        // A member may read the roster; any authenticated user may read their
+        // own membership doc (needed to check "am I already in this class?"
+        // before joining, even when that doc does not exist yet).
+        allow get: if isClassMember(classId)
+          || (isAuthenticated() && memberId == request.auth.uid);
+
+        allow list: if isClassMember(classId);
 
         // The class owner approves a pending request: only the status changes,
         // from pending to active (the class memberCount is updated alongside).
@@ -337,6 +400,430 @@ service cloud.firestore {
           && ((memberId == request.auth.uid && resource.data.isOwner == false)
               || (isClassOwner(classId) && resource.data.status == 'pending'));
       }
+
+      // -----------------------------------------------------------
+      // classes/{classId}/evaluations/{evaluationId}
+      // Drafts are private to the class owner until publications exist.
+      // -----------------------------------------------------------
+      match /evaluations/{evaluationId} {
+        function isValidGenerationMeta() {
+          let meta = request.resource.data.generationMeta;
+          return meta is map
+            && meta.keys().hasOnly([
+                'model', 'pdfPages', 'pdfCharacters',
+                'requestedQuestions', 'durationMs', 'schemaVersion'
+              ])
+            && meta.model is string
+            && meta.model.size() <= 120
+            && meta.pdfPages is number && meta.pdfPages >= 0
+            && meta.pdfCharacters is number && meta.pdfCharacters >= 0
+            && meta.requestedQuestions is number && meta.requestedQuestions >= 0
+            && meta.durationMs is number && meta.durationMs >= 0
+            && meta.schemaVersion is string
+            && meta.schemaVersion.size() <= 20;
+        }
+
+        function isValidEvaluation() {
+          let data = request.resource.data;
+          return data.keys().hasOnly([
+              'title', 'status', 'sourceFiles', 'rawJson', 'generationMeta',
+              'createdBy', 'createdAt', 'updatedAt'
+            ])
+            && data.title is string
+            && data.title.size() >= 1
+            && data.title.size() <= 120
+            && data.status == 'draft'
+            && data.sourceFiles is list
+            && data.sourceFiles.size() <= 20
+            && data.rawJson is string
+            && data.rawJson.size() >= 2
+            && data.rawJson.size() <= 500000
+            && isValidGenerationMeta()
+            && data.createdBy == request.auth.uid
+            && data.createdAt is timestamp
+            && data.updatedAt is timestamp;
+        }
+
+        allow get, list: if isClassOwner(classId);
+
+        allow create: if isClassOwner(classId)
+          && isValidEvaluation();
+
+        allow update: if isClassOwner(classId)
+          && isValidEvaluation()
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt;
+
+        allow delete: if isClassOwner(classId);
+      }
+
+      // -----------------------------------------------------------
+      // classes/{classId}/publications/{publicationId}
+      // Sanitized document readable by active class members. The full
+      // questions with answer keys live in content/feedback.
+      // -----------------------------------------------------------
+      match /publications/{publicationId} {
+        function isValidPublicationGenerationMeta() {
+          let meta = request.resource.data.generationMeta;
+          return meta is map
+            && meta.keys().hasOnly([
+                'model', 'pdfPages', 'pdfCharacters',
+                'requestedQuestions', 'durationMs', 'schemaVersion'
+              ])
+            && meta.model is string
+            && meta.model.size() <= 120
+            && meta.pdfPages is number && meta.pdfPages >= 0
+            && meta.pdfCharacters is number && meta.pdfCharacters >= 0
+            && meta.requestedQuestions is number && meta.requestedQuestions >= 0
+            && meta.durationMs is number && meta.durationMs >= 0
+            && meta.schemaVersion is string
+            && meta.schemaVersion.size() <= 20;
+        }
+
+        function isValidPublication() {
+          let data = request.resource.data;
+          return data.keys().hasOnly([
+              'evaluationId', 'title', 'accessCode', 'sourceFiles', 'rawJson',
+              'rawJsonSafe', 'generationMeta', 'openAt', 'closeAt', 'maxAttempts',
+              'durationMinutes', 'guestAccess', 'guestCapacity', 'guestCount',
+              'attemptCount', 'createdBy', 'createdAt', 'updatedAt'
+            ])
+            && data.keys().hasAll([
+              'evaluationId', 'title', 'accessCode', 'sourceFiles', 'rawJson',
+              'rawJsonSafe', 'generationMeta', 'openAt', 'closeAt', 'maxAttempts',
+              'durationMinutes', 'guestAccess', 'guestCapacity', 'guestCount',
+              'attemptCount', 'createdBy', 'createdAt', 'updatedAt'
+            ])
+            && data.evaluationId is string
+            && data.evaluationId.size() >= 1
+            && data.evaluationId.size() <= 128
+            && data.title is string
+            && data.title.size() >= 1
+            && data.title.size() <= 120
+            && data.accessCode is string
+            && data.accessCode.size() == 6
+            && data.sourceFiles is list
+            && data.sourceFiles.size() <= 20
+            && data.rawJson is string
+            && data.rawJson.size() >= 2
+            && data.rawJson.size() <= 500000
+            && data.rawJsonSafe is bool
+            && data.rawJsonSafe == true
+            && isValidPublicationGenerationMeta()
+            && data.maxAttempts is int
+            && data.maxAttempts >= 1
+            && data.maxAttempts <= 100
+            && (
+              data.durationMinutes == null
+              || (data.durationMinutes is int
+                  && data.durationMinutes >= 1
+                  && data.durationMinutes <= 180)
+            )
+            && data.guestAccess is bool
+            && data.guestCapacity is int
+            && data.guestCapacity >= 0
+            && data.guestCapacity <= 500
+            && data.guestCount is int
+            && data.guestCount >= 0
+            && data.guestCount <= data.guestCapacity
+            && (data.guestAccess == false || data.guestCapacity >= 1)
+            && data.attemptCount is int
+            && data.attemptCount >= 0
+            && data.attemptCount <= 1000000
+            && (
+              (data.openAt == null && data.closeAt == null)
+              || (
+                data.openAt is timestamp
+                && data.closeAt is timestamp
+                && data.openAt < data.closeAt
+              )
+            )
+            && data.createdBy == request.auth.uid
+            && data.createdAt is timestamp
+            && data.updatedAt is timestamp;
+        }
+
+        function isOwnerPublicationUpdate() {
+          return isClassOwner(classId)
+            && isValidPublication()
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.accessCode == resource.data.accessCode
+            && request.resource.data.guestCount == resource.data.get('guestCount', 0)
+            && request.resource.data.attemptCount == resource.data.attemptCount
+            && resource.data.attemptCount == 0;
+        }
+
+        // A participant starting a new attempt increments the counter in the
+        // same transaction that grows their own results document. Members only
+        // touch attemptCount; a guest's first attempt also consumes a seat.
+        function isAttemptMarkerUpdate() {
+          let resultPath = /databases/$(database)/documents/classes/$(classId)/publications/$(publicationId)/results/$(request.auth.uid);
+          let beforeExists = exists(resultPath);
+          let beforeAttempts = beforeExists ? get(resultPath).data.attempts.size() : 0;
+          let afterAttempts = getAfter(resultPath).data.attempts.size();
+          let beforeGuestCount = resource.data.get('guestCount', 0);
+          let afterGuestCount = request.resource.data.get('guestCount', 0);
+          let base = resource.data.rawJsonSafe == true
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['attemptCount', 'guestCount'])
+            && request.resource.data.attemptCount == resource.data.attemptCount + 1
+            && getAfter(resultPath).data.studentId == request.auth.uid
+            && afterAttempts == beforeAttempts + 1;
+
+          let memberCase = isActiveClassMember(classId)
+            && afterGuestCount == beforeGuestCount;
+
+          let guestCase = isGuestSession()
+            && resource.data.get('guestAccess', false) == true
+            && (
+              (!beforeExists
+                && afterGuestCount == beforeGuestCount + 1
+                && afterGuestCount <= resource.data.get('guestCapacity', 0))
+              || (beforeExists
+                && afterGuestCount == beforeGuestCount)
+            );
+
+          return base && (memberCase || guestCase);
+        }
+
+        allow get: if isClassOwner(classId)
+          || (isActiveClassMember(classId) && resource.data.rawJsonSafe == true)
+          || (isGuestSession()
+              && resource.data.rawJsonSafe == true
+              && resource.data.get('guestAccess', false) == true);
+
+        allow list: if isClassOwner(classId)
+          || (isActiveClassMember(classId) && resource.data.rawJsonSafe == true);
+
+        allow create: if isClassOwner(classId)
+          && isValidPublication()
+          && request.resource.data.attemptCount == 0
+          && request.resource.data.guestCount == 0
+          && (request.resource.data.guestAccess == true
+              || request.resource.data.guestCapacity == 0);
+
+        allow update: if isOwnerPublicationUpdate() || isAttemptMarkerUpdate();
+
+        allow delete: if isClassOwner(classId);
+
+        // ---------------------------------------------------------
+        // classes/{classId}/publications/{publicationId}/content/feedback
+        // Full questions + answer keys. Owner always; students after submitting.
+        // Writes are blocked once attemptCount > 0.
+        // ---------------------------------------------------------
+        match /content/{contentId} {
+          function publicationHasAttempts() {
+            let publicationPath = /databases/$(database)/documents/classes/$(classId)/publications/$(publicationId);
+            let data = getAfter(publicationPath).data;
+            return data.attemptCount > 0;
+          }
+
+          function hasSubmittedResult() {
+            let resultPath = /databases/$(database)/documents/classes/$(classId)/publications/$(publicationId)/results/$(request.auth.uid);
+            return exists(resultPath) && get(resultPath).data.hasSubmitted == true;
+          }
+
+          function isValidContent() {
+            let data = request.resource.data;
+            return contentId == 'feedback'
+              && data.keys().hasOnly([
+                  'classId', 'publicationId', 'title', 'maxAttempts',
+                  'durationMinutes', 'openAt', 'closeAt', 'rawJson', 'createdBy',
+                  'createdAt', 'updatedAt'
+                ])
+              && data.keys().hasAll([
+                  'classId', 'publicationId', 'title', 'maxAttempts',
+                  'durationMinutes', 'openAt', 'closeAt', 'rawJson', 'createdBy',
+                  'createdAt', 'updatedAt'
+                ])
+              && data.classId == classId
+              && data.publicationId == publicationId
+              && data.title is string
+              && data.title.size() >= 1
+              && data.title.size() <= 120
+              && data.maxAttempts is int
+              && data.maxAttempts >= 1
+              && data.maxAttempts <= 100
+              && (
+                data.durationMinutes == null
+                || (data.durationMinutes is int
+                    && data.durationMinutes >= 1
+                    && data.durationMinutes <= 180)
+              )
+              && (
+                (data.openAt == null && data.closeAt == null)
+                || (
+                  data.openAt is timestamp
+                  && data.closeAt is timestamp
+                  && data.openAt < data.closeAt
+                )
+              )
+              && data.rawJson is string
+              && data.rawJson.size() >= 2
+              && data.rawJson.size() <= 500000
+              && data.createdBy == request.auth.uid
+              && data.createdAt is timestamp
+              && data.updatedAt is timestamp;
+          }
+
+          allow get: if isClassOwner(classId)
+            || ((isActiveClassMember(classId) || isGuestSession()) && hasSubmittedResult());
+
+          allow create: if isClassOwner(classId)
+            && isValidContent()
+            && !publicationHasAttempts();
+
+          allow update: if isClassOwner(classId)
+            && isValidContent()
+            && request.resource.data.createdBy == resource.data.createdBy
+            && request.resource.data.createdAt == resource.data.createdAt
+            && !publicationHasAttempts();
+
+          allow list, delete: if false;
+        }
+
+        // ---------------------------------------------------------
+        // classes/{classId}/publications/{publicationId}/results/{uid}
+        // One document per student and publication.
+        // ---------------------------------------------------------
+        match /results/{studentId} {
+          function isValidResult() {
+            let data = request.resource.data;
+            return data.keys().hasOnly([
+                'publicationId', 'studentId', 'studentName',
+                'publicationTitle', 'hasSubmitted', 'attempts',
+                'createdAt', 'updatedAt'
+              ])
+              && data.keys().hasAll([
+                'publicationId', 'studentId', 'studentName',
+                'publicationTitle', 'hasSubmitted', 'attempts',
+                'createdAt', 'updatedAt'
+              ])
+              && data.publicationId == publicationId
+              && data.studentId == request.auth.uid
+              && studentId == request.auth.uid
+              && data.studentName is string
+              && data.studentName.size() >= 1
+              && data.studentName.size() <= 160
+              && data.publicationTitle is string
+              && data.publicationTitle.size() >= 1
+              && data.publicationTitle.size() <= 120
+              && data.hasSubmitted is bool
+              && data.attempts is list
+              && data.attempts.size() >= 1
+              && data.attempts.size() <= 100
+              && data.createdAt is timestamp
+              && data.updatedAt is timestamp;
+          }
+
+          // Auto-submitting a pending attempt and immediately starting a new
+          // one is a single client write. It is valid when the previous last
+          // attempt is now submitted and the appended attempt is in progress.
+          function isAutoSubmitAndContinue(before, after) {
+            let newAttempt = after.attempts[after.attempts.size() - 1];
+            let previousAttempt = after.attempts[before.attempts.size() - 1];
+            return after.hasSubmitted == true
+              && before.hasSubmitted == false
+              && after.attempts.size() == before.attempts.size() + 1
+              && newAttempt.status == 'in_progress'
+              && newAttempt.attemptNumber == before.attempts.size() + 1
+              && previousAttempt.status == 'submitted';
+          }
+
+          function isValidResultUpdate() {
+            let before = resource.data;
+            let after = request.resource.data;
+            return after.attempts.size() >= before.attempts.size()
+              && after.attempts.size() <= before.attempts.size() + 1
+              && after.studentId == before.studentId
+              && after.publicationId == before.publicationId
+              && after.createdAt == before.createdAt
+              && (!after.hasSubmitted
+                  || before.hasSubmitted
+                  || after.attempts.size() == before.attempts.size()
+                  || isAutoSubmitAndContinue(before, after));
+          }
+
+          function publicationBefore() {
+            return get(/databases/$(database)/documents/classes/$(classId)/publications/$(publicationId)).data;
+          }
+
+          function publicationAfter() {
+            return getAfter(/databases/$(database)/documents/classes/$(classId)/publications/$(publicationId)).data;
+          }
+
+          // Growing the attempts list (a new attempt) must be coupled with the
+          // publication counter; draft saves and submissions keep it unchanged.
+          function isAttemptCounterConsistent() {
+            let before = resource.data;
+            let after = request.resource.data;
+            return after.attempts.size() == before.attempts.size()
+              || (after.attempts.size() == before.attempts.size() + 1
+                && publicationAfter().get('attemptCount', 0) == publicationBefore().get('attemptCount', 0) + 1
+                && publicationAfter().get('guestCount', 0) == publicationBefore().get('guestCount', 0));
+          }
+
+          // A result may only be created together with the publication counter
+          // update, so guests cannot bypass the seat limit with a bare write.
+          function isMemberResultCreate() {
+            let before = publicationBefore();
+            let after = publicationAfter();
+            return isActiveClassMember(classId)
+              && after.get('guestCount', 0) == before.get('guestCount', 0)
+              && after.get('attemptCount', 0) == before.get('attemptCount', 0) + 1;
+          }
+
+          function isGuestResultCreate() {
+            let before = publicationBefore();
+            let after = publicationAfter();
+            return isGuestSession()
+              && before.get('guestAccess', false) == true
+              && after.get('guestCount', 0) == before.get('guestCount', 0) + 1
+              && after.get('guestCount', 0) <= before.get('guestCapacity', 0)
+              && after.get('attemptCount', 0) == before.get('attemptCount', 0) + 1;
+          }
+
+          allow get: if isClassOwner(classId) || studentId == request.auth.uid;
+
+          allow list: if isClassOwner(classId);
+
+          allow create: if isAuthenticated()
+            && studentId == request.auth.uid
+            && isValidResult()
+            && request.resource.data.hasSubmitted == false
+            && (isMemberResultCreate() || isGuestResultCreate());
+
+          allow update: if isAuthenticated()
+            && studentId == request.auth.uid
+            && isValidResult()
+            && isValidResultUpdate()
+            && isAttemptCounterConsistent()
+            && (isActiveClassMember(classId) || isGuestSession());
+
+          allow delete: if false;
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // publicationCodes/{code} -> { classId, publicationId }
+    // -------------------------------------------------------------
+    match /publicationCodes/{code} {
+      allow get: if isAuthenticated();
+
+      allow create: if isAuthenticated()
+        && code.matches("^[A-Z0-9]{6}$")
+        && request.resource.data.keys().hasOnly(['classId', 'publicationId'])
+        && request.resource.data.classId is string
+        && request.resource.data.classId.size() <= 128
+        && request.resource.data.publicationId is string
+        && request.resource.data.publicationId.size() <= 128
+        && isClassOwner(request.resource.data.classId)
+        && getAfter(/databases/$(database)/documents/classes/$(request.resource.data.classId)/publications/$(request.resource.data.publicationId)).data.accessCode == code;
+
+      allow delete: if isAuthenticated() && isClassOwner(resource.data.classId);
+
+      allow update, list: if false;
     }
 
     // -------------------------------------------------------------

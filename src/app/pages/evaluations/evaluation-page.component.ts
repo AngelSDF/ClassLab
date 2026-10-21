@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { RouterLink, ActivatedRoute } from '@angular/router';
-import { SessionService } from '../core/session.service';
+import { SessionService } from '../../core/auth/session.service';
 
 @Component({
   selector: 'app-evaluation-page',
@@ -17,8 +17,8 @@ import { SessionService } from '../core/session.service';
         <article class="card">
           <h2>PDF → texto → CAG/Groq</h2>
           <p>
-            El flujo está representado visualmente; no se suben archivos
-            ni se llama a un modelo todavía.
+            El flujo está representado visualmente; no se suben archivos ni se llama a un modelo
+            todavía.
           </p>
 
           <ol>
@@ -28,9 +28,7 @@ import { SessionService } from '../core/session.service';
             <li>Revisar antes de publicar</li>
           </ol>
 
-          <button class="primary-button" disabled>
-            Generación disponible próximamente
-          </button>
+          <button class="primary-button" disabled>Generación disponible próximamente</button>
         </article>
       } @else {
         <article class="card">
@@ -45,7 +43,7 @@ import { SessionService } from '../core/session.service';
             Las preguntas y los intentos se implementarán después.
           </p>
 
-          <a routerLink="/home">Volver al inicio</a>
+          <a class="secondary-button" routerLink="/home">Volver al inicio</a>
         </article>
       }
     </section>
@@ -55,6 +53,5 @@ export class EvaluationPageComponent {
   protected readonly session = inject(SessionService);
   private readonly route = inject(ActivatedRoute);
 
-  protected readonly isTeacherPreview =
-    this.route.snapshot.routeConfig?.path === 'teacher-preview';
+  protected readonly isTeacherPreview = this.route.snapshot.routeConfig?.path === 'teacher-preview';
 }

@@ -6,10 +6,26 @@
       <a routerLink="/classes" routerLinkActive="active">Mis clases</a>
       <a routerLink="/profile" routerLinkActive="active">Perfil</a>
     </nav>
-    <div class="user-menu">
-      <span class="role-pill">{{ session.activeRole() === 'teacher' ? 'Docente' : 'Estudiante' }}</span>
-      <button class="link-button" type="button" (click)="signOut()">Salir</button>
-    </div>
   }
+  <div class="user-menu">
+    <button
+      class="theme-toggle"
+      type="button"
+      [attr.aria-label]="themeLabel"
+      [attr.aria-pressed]="theme.theme() === 'dark'"
+      (click)="theme.toggle()"
+    >
+      {{ themeLabel }}
+    </button>
+    @if (session.isAnonymous()) {
+      <span class="role-pill">Invitado</span>
+      <a class="link-button" routerLink="/access">Iniciar sesión</a>
+    } @else if (canShowNavigation()) {
+      <span class="role-pill">{{
+        session.activeRole() === 'teacher' ? 'Docente' : 'Estudiante'
+      }}</span>
+      <button class="link-button" type="button" (click)="signOut()">Salir</button>
+    }
+  </div>
 </header>
 <main class="page-shell"><router-outlet /></main>

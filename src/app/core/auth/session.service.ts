@@ -9,17 +9,11 @@ import {
   signOut,
 } from 'firebase/auth';
 import { doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { firebaseAuth, firebaseFirestore } from './firebase';
+import { firebaseAuth, firebaseFirestore } from '../shared/firebase';
 import { Gender, RegistrationData, UserRecord, UserRole } from './user-record';
 
 export type AccountState =
-  | 'unconfigured'
-  | 'loading'
-  | 'signedOut'
-  | 'anonymous'
-  | 'needsOnboarding'
-  | 'ready'
-  | 'error';
+  'unconfigured' | 'loading' | 'signedOut' | 'anonymous' | 'needsOnboarding' | 'ready' | 'error';
 
 export interface ProfilePrefill {
   firstName: string;
@@ -130,9 +124,48 @@ export class SessionService {
   async startGuestSession(name: string): Promise<void> {
     if (!this.auth) throw new Error('Firebase aún no está configurado.');
     this.error.set(null);
-    sessionStorage.setItem(GUEST_NAME_KEY, name.trim());
-    await signInAnonymously(this.auth);
-    await this.waitForAccountState();
+
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('Ingresa tu nombre.');
+    if (this.user() && !this.user()?.isAnonymous) {
+      throw new Error('Ya hay una sesión iniciada. Cierra sesión para entrar como invitado.');
+    }
+
+    sessionStorage.setItem(GUEST_NAME_KEY, trimmed);
+
+    // Una sesión anónima ya activa conserva su UID y sus intentos.
+    if (this.user()?.isAnonymous) {
+      await this.waitForAccountState();
+      return;
+    }
+
+    try {
+      const credential = await signInAnonymously(this.auth);
+      if (this.accountState() !== 'anonymous') {
+        this.user.set(credential.user);
+        this.accountState.set('anonymous');
+      }
+      await this.waitForAccountState();
+    } catch (err) {
+      sessionStorage.removeItem(GUEST_NAME_KEY);
+      throw err;
+    }
+  }
+
+  describeAuthError(err: unknown): string {
+    const code = (err as { code?: string } | null)?.code;
+    switch (code) {
+      case 'auth/operation-not-allowed':
+        return 'El acceso como invitado no está habilitado. Activa el proveedor Anonymous en Firebase Authentication.';
+      case 'auth/network-request-failed':
+        return 'No pudimos conectar con Firebase. Revisa tu conexión e inténtalo otra vez.';
+      case 'auth/too-many-requests':
+        return 'Demasiados intentos. Espera un momento e inténtalo otra vez.';
+      case 'auth/api-key-not-valid':
+        return 'La configuración pública de Firebase no es válida.';
+      default:
+        return err instanceof Error ? err.message : 'No fue posible iniciar la sesión de invitado.';
+    }
   }
 
   async completeRegistration(data: RegistrationData): Promise<void> {
@@ -199,6 +232,13 @@ export class SessionService {
     localStorage.setItem(ACTIVE_ROLE_KEY, role);
     this.activeRole.set(role);
   }
+  /**
+   * Cancela el onboarding. En este punto aún no se creó ningún documento del
+   * usuario, por lo que cerrar sesión es suficiente para volver a 'signedOut'.
+   */
+  async cancelRegistration(): Promise<void> {
+    await this.signOut();
+  }
 
   async signOut(): Promise<void> {
     this.unsubscribeUser?.();
@@ -211,9 +251,11 @@ export class SessionService {
 
     sessionStorage.removeItem(GUEST_NAME_KEY);
     localStorage.removeItem(ACTIVE_ROLE_KEY);
+    this.user.set(null);
     this.userRecord.set(null);
     this.profilePrefill.set(null);
     this.activeRole.set('student');
+    this.accountState.set('signedOut');
   }
 
   // --------------------------------------------------------------------------
